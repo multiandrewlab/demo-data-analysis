@@ -22,6 +22,79 @@ def _setup_logging(level: str):
     )
 
 
+def _get_connections(config):
+    """Create MySQL and BigQuery connections from config. Returns (mysql_conn, bq_conns)."""
+    mysql_conn = None
+    bq_conns = {}
+
+    if config.mysql.databases:
+        from src.connections.mysql import MySQLConnection
+        mysql_conn = MySQLConnection(config.mysql)
+
+    if config.bigquery.projects:
+        from src.connections.bigquery import BigQueryConnection
+        for proj_cfg in config.bigquery.projects:
+            if proj_cfg.project:
+                bq_conns[proj_cfg.project] = BigQueryConnection(
+                    config.bigquery, project=proj_cfg.project
+                )
+
+    return mysql_conn, bq_conns
+
+
+def _dispose_connections(mysql_conn, bq_conns):
+    """Dispose all connections."""
+    if mysql_conn:
+        mysql_conn.dispose()
+    for bq in bq_conns.values():
+        bq.dispose()
+
+
+def _fetch_sample(config, tbl, columns, sampler):
+    """Fetch a sampled DataFrame for a table. Returns DataFrame or None on failure."""
+    import pandas as pd
+    from src.connections.mysql import MySQLConnection
+    from src.connections.bigquery import BigQueryConnection
+
+    if tbl.source == "mysql":
+        conn = MySQLConnection(config.mysql)
+        pk_cols = [c for c in columns if c.is_primary_key]
+        pk_col = pk_cols[0].column_name if pk_cols else None
+
+        query = sampler.build_sample_query(
+            "mysql", tbl.database_name, tbl.table_name,
+            row_count=tbl.row_count, pk_column=pk_col,
+        )
+        rows = conn.execute_query(query, tbl.database_name)
+        conn.dispose()
+        return pd.DataFrame(rows)
+
+    elif tbl.source == "bigquery":
+        bq = None
+        for proj_cfg in config.bigquery.projects:
+            if tbl.database_name in proj_cfg.datasets:
+                bq = BigQueryConnection(config.bigquery, project=proj_cfg.project)
+                break
+        if bq is None:
+            logger.warning("No BQ project found for dataset %s", tbl.database_name)
+            return None
+
+        query = sampler.build_sample_query(
+            "bigquery", tbl.database_name, tbl.table_name,
+            row_count=tbl.row_count,
+        )
+        try:
+            result = bq.execute_query(query)
+            return result.to_dataframe()
+        except Exception as e:
+            logger.warning("Skipping %s.%s: %s", tbl.database_name, tbl.table_name, e)
+            return None
+        finally:
+            bq.dispose()
+
+    return None
+
+
 @click.group()
 def cli():
     """Synthetic Data Profiler — analyze tables for realistic data generation."""
@@ -36,29 +109,16 @@ def discover(config_path: str):
     _setup_logging(config.output.log_level)
     store = ProfileStore(config.output.database_path)
 
+    mysql_conn, bq_conns = _get_connections(config)
     try:
         from src.discovery.schema import SchemaDiscoverer
-
-        mysql_conn = None
-        bq_conns = {}
-
-        if config.mysql.databases:
-            from src.connections.mysql import MySQLConnection
-            mysql_conn = MySQLConnection(config.mysql)
-
-        if config.bigquery.projects:
-            from src.connections.bigquery import BigQueryConnection
-            for proj_cfg in config.bigquery.projects:
-                if proj_cfg.project:
-                    bq_conns[proj_cfg.project] = BigQueryConnection(
-                        config.bigquery, project=proj_cfg.project
-                    )
 
         discoverer = SchemaDiscoverer(config, store,
                                       mysql_conn=mysql_conn, bq_conns=bq_conns)
         discoverer.discover_all()
         console.print("[green]Discovery complete.[/green]")
     finally:
+        _dispose_connections(mysql_conn, bq_conns)
         store.close()
 
 
@@ -73,8 +133,6 @@ def profile(config_path: str):
     try:
         from src.profiling.profiler import ColumnProfiler
         from src.profiling.sampler import AdaptiveSampler
-        from src.connections.mysql import MySQLConnection
-        from src.connections.bigquery import BigQueryConnection
 
         profiler = ColumnProfiler()
         sampler = AdaptiveSampler(config.sampling)
@@ -82,54 +140,14 @@ def profile(config_path: str):
         tables = store.get_tables_by_status("profile_status", "pending")
         console.print(f"[cyan]Profiling {len(tables)} tables...[/cyan]")
 
-        import pandas as pd
-
         for tbl in tables:
             store.update_table_status(tbl.id, "profile_status", "in_progress")
             columns = store.get_columns_for_table(tbl.id)
 
-            # Get the right connection
-            if tbl.source == "mysql":
-                conn = MySQLConnection(config.mysql)
-                pk_cols = [c for c in columns if c.is_primary_key]
-                pk_col = pk_cols[0].column_name if pk_cols else None
-
-                query = sampler.build_sample_query(
-                    "mysql", tbl.database_name, tbl.table_name,
-                    row_count=tbl.row_count, pk_column=pk_col,
-                )
-                rows = conn.execute_query(query, tbl.database_name)
-                df = pd.DataFrame(rows)
-                conn.dispose()
-            elif tbl.source == "bigquery":
-                # Find the right project connection for this dataset
-                bq = None
-                for proj_cfg in config.bigquery.projects:
-                    if tbl.database_name in proj_cfg.datasets:
-                        bq = BigQueryConnection(config.bigquery, project=proj_cfg.project)
-                        break
-                if bq is None:
-                    logger.warning("No BQ project found for dataset %s", tbl.database_name)
-                    store.update_table_status(tbl.id, "profile_status", "skipped")
-                    continue
-
-                query = sampler.build_sample_query(
-                    "bigquery", tbl.database_name, tbl.table_name,
-                    row_count=tbl.row_count,
-                )
-                try:
-                    result = bq.execute_query(query)
-                    df = result.to_dataframe()
-                except Exception as e:
-                    logger.warning("Skipping %s.%s: %s", tbl.database_name,
-                                  tbl.table_name, e)
-                    store.update_table_status(tbl.id, "profile_status", "skipped")
-                    continue
-                finally:
-                    bq.dispose()
-            else:
+            df = _fetch_sample(config, tbl, columns, sampler)
+            if df is None:
+                store.update_table_status(tbl.id, "profile_status", "skipped")
                 continue
-
             if df.empty:
                 store.update_table_status(tbl.id, "profile_status", "completed")
                 continue
@@ -163,20 +181,15 @@ def ratios(config_path: str):
         from src.ratios.detector import RatioDetector
         from src.ratios.calculator import RatioCalculator
         from src.profiling.sampler import AdaptiveSampler
-        from src.connections.mysql import MySQLConnection
-        from src.connections.bigquery import BigQueryConnection
 
         detector = RatioDetector()
         calculator = RatioCalculator()
         sampler = AdaptiveSampler(config.sampling)
 
         tables = store.get_tables_by_status("ratio_status", "pending")
-        # Only process tables that have been profiled
         tables = [t for t in tables if t.profile_status == "completed"]
 
         console.print(f"[cyan]Analyzing ratios for {len(tables)} tables...[/cyan]")
-
-        import pandas as pd
 
         for tbl in tables:
             store.update_table_status(tbl.id, "ratio_status", "in_progress")
@@ -190,50 +203,14 @@ def ratios(config_path: str):
                 store.update_table_status(tbl.id, "ratio_status", "completed")
                 continue
 
-            # Fetch data sample
-            if tbl.source == "mysql":
-                conn = MySQLConnection(config.mysql)
-                pk_cols = [c for c in columns if c.is_primary_key]
-                pk_col = pk_cols[0].column_name if pk_cols else None
-                query = sampler.build_sample_query(
-                    "mysql", tbl.database_name, tbl.table_name,
-                    row_count=tbl.row_count, pk_column=pk_col,
-                )
-                rows = conn.execute_query(query, tbl.database_name)
-                df = pd.DataFrame(rows)
-                conn.dispose()
-            elif tbl.source == "bigquery":
-                bq = None
-                for proj_cfg in config.bigquery.projects:
-                    if tbl.database_name in proj_cfg.datasets:
-                        bq = BigQueryConnection(config.bigquery, project=proj_cfg.project)
-                        break
-                if bq is None:
-                    store.update_table_status(tbl.id, "ratio_status", "skipped")
-                    continue
-
-                query = sampler.build_sample_query(
-                    "bigquery", tbl.database_name, tbl.table_name,
-                    row_count=tbl.row_count,
-                )
-                try:
-                    result = bq.execute_query(query)
-                    df = result.to_dataframe()
-                except Exception as e:
-                    logger.warning("Skipping ratios for %s.%s: %s",
-                                  tbl.database_name, tbl.table_name, e)
-                    store.update_table_status(tbl.id, "ratio_status", "skipped")
-                    continue
-                finally:
-                    bq.dispose()
-            else:
+            df = _fetch_sample(config, tbl, columns, sampler)
+            if df is None:
+                store.update_table_status(tbl.id, "ratio_status", "skipped")
                 continue
-
             if df.empty:
                 store.update_table_status(tbl.id, "ratio_status", "completed")
                 continue
 
-            # Detect plausible pairs
             metric_names = [c.column_name for c in metric_cols
                            if c.column_name in df.columns]
             pairs = detector.find_plausible_pairs(df, metric_names)
@@ -241,7 +218,6 @@ def ratios(config_path: str):
             col_name_to_id = {c.column_name: c.id for c in columns}
 
             for num_col, den_col in pairs:
-                # Global ratio
                 ratio_result = calculator.compute_ratio(df, num_col, den_col)
                 ratio_id = store.save_ratio(
                     tbl.id, col_name_to_id[num_col], col_name_to_id[den_col],
@@ -250,7 +226,6 @@ def ratios(config_path: str):
                     ratio_histogram_json=ratio_result["ratio_histogram_json"],
                 )
 
-                # Dimensional breakdowns
                 for dim_col in dimension_cols:
                     if dim_col.column_name not in df.columns:
                         continue
@@ -264,7 +239,6 @@ def ratios(config_path: str):
                             sample_size=bd["sample_size"],
                         )
 
-                # Temporal trends
                 for temp_col in temporal_cols:
                     if temp_col.column_name not in df.columns:
                         continue

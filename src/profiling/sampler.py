@@ -1,6 +1,17 @@
 """Adaptive sampling strategy for MySQL and BigQuery tables."""
 
+import re
+
 from src.config import SamplingConfig
+
+# Reject identifiers containing characters that could break out of backtick quoting
+_UNSAFE_IDENTIFIER = re.compile(r"[`;\x00]")
+
+
+def _validate_identifier(value: str, label: str = "identifier") -> str:
+    if _UNSAFE_IDENTIFIER.search(value):
+        raise ValueError(f"Unsafe {label}: {value!r}")
+    return value
 
 
 class AdaptiveSampler:
@@ -26,6 +37,14 @@ class AdaptiveSampler:
             pk_column: primary key column name (for MySQL modulo sampling)
             columns: specific columns to select (None = all)
         """
+        _validate_identifier(database, "database")
+        _validate_identifier(table_name, "table_name")
+        if pk_column:
+            _validate_identifier(pk_column, "pk_column")
+        if columns:
+            for c in columns:
+                _validate_identifier(c, "column")
+
         select = self._select_clause(columns)
         row_count = row_count or 0
 

@@ -1,6 +1,7 @@
 """BigQuery connection with dry-run cost estimation and byte limits."""
 
 import logging
+import re
 from typing import Any
 
 from google.cloud import bigquery
@@ -8,6 +9,14 @@ from google.cloud import bigquery
 from src.config import BigQueryConfig
 
 logger = logging.getLogger(__name__)
+
+_UNSAFE_IDENTIFIER = re.compile(r"[`;\x00]")
+
+
+def _validate_identifier(value: str, label: str = "identifier") -> str:
+    if _UNSAFE_IDENTIFIER.search(value):
+        raise ValueError(f"Unsafe {label}: {value!r}")
+    return value
 
 
 class QueryTooExpensiveError(Exception):
@@ -70,6 +79,8 @@ class BigQueryConnection:
 
     def get_information_schema(self, dataset: str) -> dict:
         """Fetch table and column metadata from INFORMATION_SCHEMA. Cheap/free."""
+        _validate_identifier(dataset, "dataset")
+        _validate_identifier(self._project, "project")
         client = self._get_client()
         project = self._project
 

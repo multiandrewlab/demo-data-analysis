@@ -9,6 +9,9 @@ from src.storage.models import (
 )
 
 
+_ALLOWED_STATUS_FIELDS = {"discovery_status", "profile_status", "ratio_status"}
+
+
 class ProfileStore:
     def __init__(self, db_path: str):
         self.engine = create_engine(f"sqlite:///{db_path}")
@@ -51,11 +54,15 @@ class ProfileStore:
         return list(self._session.execute(select(Table)).scalars().all())
 
     def update_table_status(self, table_id: int, status_field: str, status_value: str):
+        if status_field not in _ALLOWED_STATUS_FIELDS:
+            raise ValueError(f"Invalid status field: {status_field!r}")
         tbl = self._session.get(Table, table_id)
         setattr(tbl, status_field, status_value)
         self._session.commit()
 
     def get_tables_by_status(self, status_field: str, status_value: str) -> list[Table]:
+        if status_field not in _ALLOWED_STATUS_FIELDS:
+            raise ValueError(f"Invalid status field: {status_field!r}")
         return list(self._session.execute(
             select(Table).where(getattr(Table, status_field) == status_value)
         ).scalars().all())
