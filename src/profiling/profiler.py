@@ -47,7 +47,7 @@ class ColumnProfiler:
             return {
                 "min_value": None, "max_value": None,
                 "mean": None, "median": None, "stddev": None,
-                "p5": None, "p25": None, "p50": None, "p75": None, "p95": None,
+                "p5": None, "p25": None, "p75": None, "p95": None,
                 "zero_rate": None, "histogram_json": "[]",
             }
 
@@ -56,7 +56,7 @@ class ColumnProfiler:
             return {
                 "min_value": str(series.min()), "max_value": str(series.max()),
                 "mean": None, "median": None, "stddev": None,
-                "p5": None, "p25": None, "p50": None, "p75": None, "p95": None,
+                "p5": None, "p25": None, "p75": None, "p95": None,
                 "zero_rate": None, "histogram_json": "[]",
             }
 
@@ -81,7 +81,6 @@ class ColumnProfiler:
             "stddev": float(numeric.std()),
             "p5": float(percentiles[0]),
             "p25": float(percentiles[1]),
-            "p50": float(percentiles[2]),
             "p75": float(percentiles[3]),
             "p95": float(percentiles[4]),
             "zero_rate": zero_count / len(numeric) if len(numeric) > 0 else 0.0,

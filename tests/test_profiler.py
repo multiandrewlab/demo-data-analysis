@@ -24,9 +24,9 @@ def test_profile_metric_column():
     assert result["max_value"] == str(data["clicks"].max())
     assert result["p5"] is not None
     assert result["p25"] is not None
-    assert result["p50"] is not None
     assert result["p75"] is not None
     assert result["p95"] is not None
+    assert result["median"] is not None
     assert result["zero_rate"] is not None
     # Histogram should be a JSON string
     hist = json.loads(result["histogram_json"])
