@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: synthetic-data-profiler
+Version: 0.1.0
+Summary: Analyze production databases to discover statistical patterns for synthetic data generation
+Requires-Python: >=3.11
+Requires-Dist: click>=8.1
+Requires-Dist: sqlalchemy>=2.0
+Requires-Dist: pymysql>=1.1
+Requires-Dist: google-cloud-bigquery>=3.0
+Requires-Dist: pandas>=2.0
+Requires-Dist: numpy>=1.24
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: rich>=13.0
+Provides-Extra: openmetadata
+Requires-Dist: openmetadata-ingestion>=1.0; extra == "openmetadata"
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21; extra == "dev"

@@ -1,0 +1,13 @@
+pyproject.toml
+src/__init__.py
+src/connections/__init__.py
+src/discovery/__init__.py
+src/profiling/__init__.py
+src/ratios/__init__.py
+src/storage/__init__.py
+src/synthetic_data_profiler.egg-info/PKG-INFO
+src/synthetic_data_profiler.egg-info/SOURCES.txt
+src/synthetic_data_profiler.egg-info/dependency_links.txt
+src/synthetic_data_profiler.egg-info/entry_points.txt
+src/synthetic_data_profiler.egg-info/requires.txt
+src/synthetic_data_profiler.egg-info/top_level.txt
