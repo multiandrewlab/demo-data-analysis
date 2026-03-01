@@ -48,6 +48,13 @@ class SchemaDiscoverer:
         tables = {t.table_name: t for t in self._store.get_all_tables()
                   if t.source == "mysql" and t.database_name == database}
 
+        # Pre-fetch existing columns per table to avoid N+1 queries
+        existing_cols_by_table: dict[int, set[str]] = {}
+        for tbl_name, tbl_obj in tables.items():
+            existing_cols_by_table[tbl_obj.id] = {
+                c.column_name for c in self._store.get_columns_for_table(tbl_obj.id)
+            }
+
         for col_info in info["columns"]:
             table_name = col_info["TABLE_NAME"]
             if table_name not in tables:
@@ -59,9 +66,7 @@ class SchemaDiscoverer:
             is_fk = (table_name, col_name) in fk_map
             fk_target = fk_map.get((table_name, col_name))
 
-            # Check if column already exists
-            existing_cols = self._store.get_columns_for_table(table.id)
-            if any(c.column_name == col_name for c in existing_cols):
+            if col_name in existing_cols_by_table.get(table.id, set()):
                 continue
 
             classification = self._classifier.classify(
@@ -93,6 +98,12 @@ class SchemaDiscoverer:
         tables = {t.table_name: t for t in self._store.get_all_tables()
                   if t.source == "bigquery" and t.database_name == dataset}
 
+        existing_cols_by_table: dict[int, set[str]] = {}
+        for tbl_name, tbl_obj in tables.items():
+            existing_cols_by_table[tbl_obj.id] = {
+                c.column_name for c in self._store.get_columns_for_table(tbl_obj.id)
+            }
+
         for col_info in info["columns"]:
             table_name = col_info["table_name"]
             if table_name not in tables:
@@ -101,8 +112,7 @@ class SchemaDiscoverer:
             col_name = col_info["column_name"]
             data_type = col_info["data_type"]
 
-            existing_cols = self._store.get_columns_for_table(table.id)
-            if any(c.column_name == col_name for c in existing_cols):
+            if col_name in existing_cols_by_table.get(table.id, set()):
                 continue
 
             classification = self._classifier.classify(col_name, data_type)

@@ -142,27 +142,33 @@ def profile(config_path: str):
 
         for tbl in tables:
             store.update_table_status(tbl.id, "profile_status", "in_progress")
-            columns = store.get_columns_for_table(tbl.id)
+            try:
+                columns = store.get_columns_for_table(tbl.id)
 
-            df = _fetch_sample(config, tbl, columns, sampler)
-            if df is None:
-                store.update_table_status(tbl.id, "profile_status", "skipped")
-                continue
-            if df.empty:
+                df = _fetch_sample(config, tbl, columns, sampler)
+                if df is None:
+                    store.update_table_status(tbl.id, "profile_status", "skipped")
+                    continue
+                if df.empty:
+                    store.update_table_status(tbl.id, "profile_status", "completed")
+                    continue
+
+                for col in columns:
+                    if col.classification == "other":
+                        continue
+                    if col.column_name not in df.columns:
+                        continue
+
+                    result = profiler.profile_column(df[col.column_name], col.classification)
+                    store.save_column_profile(col.id, **result)
+
                 store.update_table_status(tbl.id, "profile_status", "completed")
+                console.print(f"  [green]Profiled {tbl.database_name}.{tbl.table_name}[/green]")
+            except Exception as e:
+                logger.error("Failed to profile %s.%s: %s",
+                            tbl.database_name, tbl.table_name, e)
+                store.update_table_status(tbl.id, "profile_status", "failed")
                 continue
-
-            for col in columns:
-                if col.classification == "other":
-                    continue
-                if col.column_name not in df.columns:
-                    continue
-
-                result = profiler.profile_column(df[col.column_name], col.classification)
-                store.save_column_profile(col.id, **result)
-
-            store.update_table_status(tbl.id, "profile_status", "completed")
-            console.print(f"  [green]Profiled {tbl.database_name}.{tbl.table_name}[/green]")
 
         console.print("[green]Profiling complete.[/green]")
     finally:
@@ -193,67 +199,73 @@ def ratios(config_path: str):
 
         for tbl in tables:
             store.update_table_status(tbl.id, "ratio_status", "in_progress")
-            columns = store.get_columns_for_table(tbl.id)
+            try:
+                columns = store.get_columns_for_table(tbl.id)
 
-            metric_cols = [c for c in columns if c.classification == "metric"]
-            dimension_cols = [c for c in columns if c.classification == "dimension"]
-            temporal_cols = [c for c in columns if c.classification == "temporal"]
+                metric_cols = [c for c in columns if c.classification == "metric"]
+                dimension_cols = [c for c in columns if c.classification == "dimension"]
+                temporal_cols = [c for c in columns if c.classification == "temporal"]
 
-            if len(metric_cols) < 2:
-                store.update_table_status(tbl.id, "ratio_status", "completed")
-                continue
+                if len(metric_cols) < 2:
+                    store.update_table_status(tbl.id, "ratio_status", "completed")
+                    continue
 
-            df = _fetch_sample(config, tbl, columns, sampler)
-            if df is None:
-                store.update_table_status(tbl.id, "ratio_status", "skipped")
-                continue
-            if df.empty:
-                store.update_table_status(tbl.id, "ratio_status", "completed")
-                continue
+                df = _fetch_sample(config, tbl, columns, sampler)
+                if df is None:
+                    store.update_table_status(tbl.id, "ratio_status", "skipped")
+                    continue
+                if df.empty:
+                    store.update_table_status(tbl.id, "ratio_status", "completed")
+                    continue
 
-            metric_names = [c.column_name for c in metric_cols
-                           if c.column_name in df.columns]
-            pairs = detector.find_plausible_pairs(df, metric_names)
+                metric_names = [c.column_name for c in metric_cols
+                               if c.column_name in df.columns]
+                pairs = detector.find_plausible_pairs(df, metric_names)
 
-            col_name_to_id = {c.column_name: c.id for c in columns}
+                col_name_to_id = {c.column_name: c.id for c in columns}
 
-            for num_col, den_col in pairs:
-                ratio_result = calculator.compute_ratio(df, num_col, den_col)
-                ratio_id = store.save_ratio(
-                    tbl.id, col_name_to_id[num_col], col_name_to_id[den_col],
-                    global_ratio=ratio_result["global_ratio"],
-                    ratio_stddev=ratio_result["ratio_stddev"],
-                    ratio_histogram_json=ratio_result["ratio_histogram_json"],
-                )
-
-                for dim_col in dimension_cols:
-                    if dim_col.column_name not in df.columns:
-                        continue
-                    breakdowns = calculator.compute_dimensional_breakdown(
-                        df, num_col, den_col, dim_col.column_name
+                for num_col, den_col in pairs:
+                    ratio_result = calculator.compute_ratio(df, num_col, den_col)
+                    ratio_id = store.save_ratio(
+                        tbl.id, col_name_to_id[num_col], col_name_to_id[den_col],
+                        global_ratio=ratio_result["global_ratio"],
+                        ratio_stddev=ratio_result["ratio_stddev"],
+                        ratio_histogram_json=ratio_result["ratio_histogram_json"],
                     )
-                    for bd in breakdowns:
-                        store.save_dimensional_breakdown(
-                            ratio_id, col_name_to_id[dim_col.column_name],
-                            bd["dimension_value"], bd["ratio_value"],
-                            sample_size=bd["sample_size"],
-                        )
 
-                for temp_col in temporal_cols:
-                    if temp_col.column_name not in df.columns:
-                        continue
-                    trends = calculator.compute_temporal_trend(
-                        df, num_col, den_col, temp_col.column_name
-                    )
-                    for trend in trends:
-                        store.save_temporal_trend(
-                            ratio_id, trend["time_bucket"],
-                            trend["ratio_value"], sample_size=trend["sample_size"],
+                    for dim_col in dimension_cols:
+                        if dim_col.column_name not in df.columns:
+                            continue
+                        breakdowns = calculator.compute_dimensional_breakdown(
+                            df, num_col, den_col, dim_col.column_name
                         )
+                        for bd in breakdowns:
+                            store.save_dimensional_breakdown(
+                                ratio_id, col_name_to_id[dim_col.column_name],
+                                bd["dimension_value"], bd["ratio_value"],
+                                sample_size=bd["sample_size"],
+                            )
 
-            store.update_table_status(tbl.id, "ratio_status", "completed")
-            console.print(f"  [green]Ratios for {tbl.database_name}.{tbl.table_name}: "
-                         f"{len(pairs)} pairs found[/green]")
+                    for temp_col in temporal_cols:
+                        if temp_col.column_name not in df.columns:
+                            continue
+                        trends = calculator.compute_temporal_trend(
+                            df, num_col, den_col, temp_col.column_name
+                        )
+                        for trend in trends:
+                            store.save_temporal_trend(
+                                ratio_id, trend["time_bucket"],
+                                trend["ratio_value"], sample_size=trend["sample_size"],
+                            )
+
+                store.update_table_status(tbl.id, "ratio_status", "completed")
+                console.print(f"  [green]Ratios for {tbl.database_name}.{tbl.table_name}: "
+                             f"{len(pairs)} pairs found[/green]")
+            except Exception as e:
+                logger.error("Failed ratios for %s.%s: %s",
+                            tbl.database_name, tbl.table_name, e)
+                store.update_table_status(tbl.id, "ratio_status", "failed")
+                continue
 
         console.print("[green]Ratio analysis complete.[/green]")
     finally:
@@ -329,6 +341,8 @@ def reset(config_path: str, phase: str):
     try:
         tables = store.get_all_tables()
         for tbl in tables:
+            if phase == "ratios":
+                store.delete_ratios_for_table(tbl.id)
             store.update_table_status(tbl.id, status_field, "pending")
         console.print(f"[green]Reset {len(tables)} tables for {phase} phase.[/green]")
     finally:

@@ -74,6 +74,24 @@ class ProfileStore:
                    is_primary_key: bool = False, is_foreign_key: bool = False,
                    fk_target_table: str | None = None,
                    fk_target_column: str | None = None) -> int:
+        existing = self._session.execute(
+            select(ColumnModel).where(
+                ColumnModel.table_id == table_id,
+                ColumnModel.column_name == column_name,
+            )
+        ).scalar_one_or_none()
+
+        if existing:
+            existing.data_type = data_type
+            existing.classification = classification
+            existing.nullable = nullable
+            existing.is_primary_key = is_primary_key
+            existing.is_foreign_key = is_foreign_key
+            existing.fk_target_table = fk_target_table
+            existing.fk_target_column = fk_target_column
+            self._session.commit()
+            return existing.id
+
         col = ColumnModel(
             table_id=table_id, column_name=column_name, data_type=data_type,
             classification=classification, nullable=nullable,
@@ -134,6 +152,13 @@ class ProfileStore:
         return list(self._session.execute(
             select(Ratio).where(Ratio.table_id == table_id)
         ).scalars().all())
+
+    def delete_ratios_for_table(self, table_id: int):
+        """Delete all ratios (and cascaded breakdowns/trends) for a table."""
+        ratios = self.get_ratios_for_table(table_id)
+        for r in ratios:
+            self._session.delete(r)
+        self._session.commit()
 
     # --- Dimensional Breakdowns ---
 

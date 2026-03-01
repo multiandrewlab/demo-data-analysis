@@ -16,6 +16,10 @@ def _validate_identifier(value: str, label: str = "identifier") -> str:
 
 class AdaptiveSampler:
     def __init__(self, config: SamplingConfig):
+        if config.medium_table_sample_pct <= 0:
+            raise ValueError(f"medium_table_sample_pct must be > 0, got {config.medium_table_sample_pct}")
+        if config.large_table_sample_rows <= 0:
+            raise ValueError(f"large_table_sample_rows must be > 0, got {config.large_table_sample_rows}")
         self._config = config
 
     def _select_clause(self, columns: list[str] | None) -> str:

@@ -4,6 +4,7 @@ import logging
 import threading
 import time
 from typing import Any
+from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -24,7 +25,9 @@ class MySQLConnection:
         self._engine: Engine | None = None  # default engine, set externally for testing
 
     def _build_url(self, config: MySQLConfig, database: str) -> str:
-        return (f"mysql+pymysql://{config.user}:{config.password}"
+        user = quote_plus(config.user)
+        password = quote_plus(config.password)
+        return (f"mysql+pymysql://{user}:{password}"
                 f"@{config.host}:{config.port}/{database}")
 
     def _get_engine(self, database: str) -> Engine:

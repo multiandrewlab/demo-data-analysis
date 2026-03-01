@@ -2,7 +2,7 @@
 
 from sqlalchemy import (
     Boolean, Column, Float, Integer, String, Text, ForeignKey,
-    create_engine,
+    UniqueConstraint, create_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -13,6 +13,9 @@ class Base(DeclarativeBase):
 
 class Table(Base):
     __tablename__ = "tables"
+    __table_args__ = (
+        UniqueConstraint("source", "database_name", "table_name", name="uq_table_identity"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     source = Column(String, nullable=False)  # 'mysql' or 'bigquery'
@@ -29,6 +32,9 @@ class Table(Base):
 
 class ColumnModel(Base):
     __tablename__ = "columns"
+    __table_args__ = (
+        UniqueConstraint("table_id", "column_name", name="uq_column_identity"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     table_id = Column(Integer, ForeignKey("tables.id"), nullable=False)
