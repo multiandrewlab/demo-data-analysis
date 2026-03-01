@@ -8,8 +8,13 @@ mysql:
   sleep_between_queries_ms: 500
 
 bigquery:
-  project: ""
-  datasets: []
+  projects: []
+  # Example multi-project config:
+  # projects:
+  #   - project: "my-gcp-project-a"
+  #     datasets: ["analytics", "reporting"]
+  #   - project: "my-gcp-project-b"
+  #     datasets: ["warehouse"]
   max_bytes_per_query: 1000000000
   dry_run_threshold_bytes: 500000000
 

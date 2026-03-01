@@ -19,9 +19,14 @@ class MySQLConfig:
 
 
 @dataclass
-class BigQueryConfig:
+class BigQueryProjectConfig:
     project: str = ""
     datasets: list[str] = field(default_factory=list)
+
+
+@dataclass
+class BigQueryConfig:
+    projects: list[BigQueryProjectConfig] = field(default_factory=list)
     max_bytes_per_query: int = 1_000_000_000
     dry_run_threshold_bytes: int = 500_000_000
 
@@ -81,6 +86,29 @@ def _merge_dataclass(dc_class, data: dict):
     return dc_class(**filtered)
 
 
+def _parse_bigquery_config(data: dict | None) -> BigQueryConfig:
+    """Parse BigQuery config, supporting both single-project and multi-project formats."""
+    if data is None:
+        return BigQueryConfig()
+
+    projects = []
+    if "projects" in data:
+        for p in data["projects"]:
+            projects.append(_merge_dataclass(BigQueryProjectConfig, p))
+    elif data.get("project"):
+        # Backwards-compat: single project/datasets at top level
+        projects.append(BigQueryProjectConfig(
+            project=data["project"],
+            datasets=data.get("datasets", []),
+        ))
+
+    return BigQueryConfig(
+        projects=projects,
+        max_bytes_per_query=data.get("max_bytes_per_query", 1_000_000_000),
+        dry_run_threshold_bytes=data.get("dry_run_threshold_bytes", 500_000_000),
+    )
+
+
 def load_config(path: str) -> ProfilerConfig:
     """Load config from YAML file with environment variable overrides."""
     with open(path) as f:
@@ -88,7 +116,7 @@ def load_config(path: str) -> ProfilerConfig:
 
     config = ProfilerConfig(
         mysql=_merge_dataclass(MySQLConfig, raw.get("mysql")),
-        bigquery=_merge_dataclass(BigQueryConfig, raw.get("bigquery")),
+        bigquery=_parse_bigquery_config(raw.get("bigquery")),
         sampling=_merge_dataclass(SamplingConfig, raw.get("sampling")),
         classification=_merge_dataclass(ClassificationConfig, raw.get("classification")),
         openmetadata=_merge_dataclass(OpenMetadataConfig, raw.get("openmetadata")),
