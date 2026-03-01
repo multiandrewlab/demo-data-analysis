@@ -26,7 +26,7 @@ class ProfileStore:
 
     def upsert_table(self, source: str, database_name: str, table_name: str,
                      row_count: int | None = None,
-                     project_name: str | None = None) -> int:
+                     project_name: str = "") -> int:
         existing = self._session.execute(
             select(Table).where(
                 Table.source == source,

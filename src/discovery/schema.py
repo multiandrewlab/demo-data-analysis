@@ -134,6 +134,9 @@ class SchemaDiscoverer:
                 self.discover_mysql(db)
         for project_cfg in self._config.bigquery.projects:
             bq_conn = self._bq_conns.get(project_cfg.project)
-            if bq_conn:
-                for ds in project_cfg.datasets:
-                    self.discover_bigquery(bq_conn, ds, project=project_cfg.project)
+            if not bq_conn:
+                logger.warning("No connection for BigQuery project %s — skipping",
+                               project_cfg.project)
+                continue
+            for ds in project_cfg.datasets:
+                self.discover_bigquery(bq_conn, ds, project=project_cfg.project)

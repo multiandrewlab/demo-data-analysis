@@ -20,7 +20,7 @@ class Table(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     source = Column(String, nullable=False)  # 'mysql' or 'bigquery'
-    project_name = Column(String)  # BQ project name, None for MySQL
+    project_name = Column(String, nullable=False, default="")  # BQ project name, "" for MySQL
     database_name = Column(String, nullable=False)
     table_name = Column(String, nullable=False)
     row_count = Column(Integer)
