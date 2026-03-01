@@ -56,20 +56,20 @@ class RatioDetector:
                             num_col, den_col)
                 continue
 
+            # Align indices first (dropna may have removed different rows)
+            common_idx = num.index.intersection(den.index)
+            num_aligned = num.loc[common_idx]
+            den_aligned = den.loc[common_idx]
+
             # Compute ratio where denominator is non-zero
-            mask = den != 0
-            aligned_num = num.loc[mask.index[mask]]
-            aligned_den = den.loc[mask.index[mask]]
+            mask = den_aligned != 0
+            num_aligned = num_aligned.loc[mask]
+            den_aligned = den_aligned.loc[mask]
 
-            if len(aligned_den) < 10:
+            if len(den_aligned) < 10:
                 continue
 
-            # Use aligned indices
-            common_idx = aligned_num.index.intersection(aligned_den.index)
-            if len(common_idx) < 10:
-                continue
-
-            ratio = aligned_num.loc[common_idx] / aligned_den.loc[common_idx]
+            ratio = num_aligned / den_aligned
             ratio = ratio.replace([np.inf, -np.inf], np.nan).dropna()
 
             if len(ratio) < 10:

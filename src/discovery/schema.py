@@ -85,7 +85,7 @@ class SchemaDiscoverer:
 
         logger.info("Discovered %d tables in MySQL database %s", len(tables), database)
 
-    def discover_bigquery(self, bq_conn, dataset: str):
+    def discover_bigquery(self, bq_conn, dataset: str, project: str | None = None):
         """Discover all tables and columns from a BigQuery dataset."""
         logger.info("Discovering BigQuery schema for dataset: %s", dataset)
         info = bq_conn.get_information_schema(dataset)
@@ -93,10 +93,12 @@ class SchemaDiscoverer:
         for tbl in info["tables"]:
             table_name = tbl["table_name"]
             row_count = tbl.get("row_count")
-            self._store.upsert_table("bigquery", dataset, table_name, row_count=row_count)
+            self._store.upsert_table("bigquery", dataset, table_name,
+                                     row_count=row_count, project_name=project)
 
         tables = {t.table_name: t for t in self._store.get_all_tables()
-                  if t.source == "bigquery" and t.database_name == dataset}
+                  if t.source == "bigquery" and t.database_name == dataset
+                  and t.project_name == project}
 
         existing_cols_by_table: dict[int, set[str]] = {}
         for tbl_name, tbl_obj in tables.items():
@@ -134,4 +136,4 @@ class SchemaDiscoverer:
             bq_conn = self._bq_conns.get(project_cfg.project)
             if bq_conn:
                 for ds in project_cfg.datasets:
-                    self.discover_bigquery(bq_conn, ds)
+                    self.discover_bigquery(bq_conn, ds, project=project_cfg.project)

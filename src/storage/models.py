@@ -14,11 +14,13 @@ class Base(DeclarativeBase):
 class Table(Base):
     __tablename__ = "tables"
     __table_args__ = (
-        UniqueConstraint("source", "database_name", "table_name", name="uq_table_identity"),
+        UniqueConstraint("source", "project_name", "database_name", "table_name",
+                         name="uq_table_identity"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     source = Column(String, nullable=False)  # 'mysql' or 'bigquery'
+    project_name = Column(String)  # BQ project name, None for MySQL
     database_name = Column(String, nullable=False)
     table_name = Column(String, nullable=False)
     row_count = Column(Integer)

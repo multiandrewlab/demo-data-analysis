@@ -25,10 +25,12 @@ class ProfileStore:
     # --- Tables ---
 
     def upsert_table(self, source: str, database_name: str, table_name: str,
-                     row_count: int | None = None) -> int:
+                     row_count: int | None = None,
+                     project_name: str | None = None) -> int:
         existing = self._session.execute(
             select(Table).where(
                 Table.source == source,
+                Table.project_name == project_name,
                 Table.database_name == database_name,
                 Table.table_name == table_name,
             )
@@ -41,7 +43,8 @@ class ProfileStore:
             self._session.commit()
             return existing.id
 
-        tbl = Table(source=source, database_name=database_name, table_name=table_name,
+        tbl = Table(source=source, project_name=project_name,
+                    database_name=database_name, table_name=table_name,
                     row_count=row_count, discovery_status="completed")
         self._session.add(tbl)
         self._session.commit()
