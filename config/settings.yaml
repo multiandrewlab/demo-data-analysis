@@ -1,0 +1,68 @@
+mysql:
+  host: "localhost"
+  port: 3306
+  user: "readonly"
+  password: ""
+  databases: []
+  max_concurrent_queries: 2
+  sleep_between_queries_ms: 500
+
+bigquery:
+  projects: []
+  # Example multi-project config:
+  # projects:
+  #   - project: "my-gcp-project-a"
+  #     datasets: ["analytics", "reporting"]
+  #   - project: "my-gcp-project-b"
+  #     datasets: ["warehouse"]
+  max_bytes_per_query: 1000000000
+  dry_run_threshold_bytes: 500000000
+
+sampling:
+  small_table_threshold: 100000
+  medium_table_threshold: 10000000
+  large_table_sample_rows: 100000
+  medium_table_sample_pct: 10
+
+classification:
+  max_dimension_cardinality: 1000
+  dimension_name_patterns:
+    - "country"
+    - "region"
+    - "publisher"
+    - "platform"
+    - "status"
+    - "type"
+    - "category"
+    - "channel"
+    - "device"
+    - "os"
+    - "browser"
+    - "language"
+    - "currency"
+    - "gender"
+  metric_name_patterns:
+    - "count"
+    - "amount"
+    - "impressions"
+    - "clicks"
+    - "revenue"
+    - "cost"
+    - "spend"
+    - "views"
+    - "conversions"
+    - "sessions"
+    - "duration"
+    - "total"
+    - "sum"
+    - "avg"
+    - "rate"
+
+output:
+  database_path: "output/profiles.db"
+  log_level: "INFO"
+
+openmetadata:
+  enabled: false
+  server_url: ""
+  api_token: ""

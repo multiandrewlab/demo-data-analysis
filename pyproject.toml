@@ -1,0 +1,26 @@
+[project]
+name = "synthetic-data-profiler"
+version = "0.1.0"
+description = "Analyze production databases to discover statistical patterns for synthetic data generation"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "sqlalchemy>=2.0",
+    "pymysql>=1.1",
+    "google-cloud-bigquery>=3.0",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+openmetadata = ["openmetadata-ingestion>=1.0"]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.21"]
+
+[project.scripts]
+profiler = "src.cli:cli"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
